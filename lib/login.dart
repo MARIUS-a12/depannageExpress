@@ -3,6 +3,7 @@ import 'package:dannexpress/espaceAdmin.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dannexpress/connectivity_wrapper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -13,15 +14,51 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
+  final _emailFocusNode = FocusNode();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   String? _errorMessage;
+  List<String> _knownEmails = const [];
+
+  static const _kKnownEmailsKey = 'login.known_emails';
+  static const _kMaxKnownEmails = 12;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKnownEmails();
+  }
+
+  Future<void> _loadKnownEmails() async {
+    final prefs = await SharedPreferences.getInstance();
+    final emails = prefs.getStringList(_kKnownEmailsKey) ?? const <String>[];
+    if (!mounted) return;
+    setState(() => _knownEmails = emails);
+  }
+
+  Future<void> _rememberEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getStringList(_kKnownEmailsKey) ?? <String>[];
+    current.removeWhere((e) => e.trim().toLowerCase() == normalized);
+    current.insert(0, normalized);
+    if (current.length > _kMaxKnownEmails) {
+      current.removeRange(_kMaxKnownEmails, current.length);
+    }
+    await prefs.setStringList(_kKnownEmailsKey, current);
+
+    if (!mounted) return;
+    setState(() => _knownEmails = current);
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _emailFocusNode.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -54,6 +91,8 @@ class _LoginPageState extends State<LoginPage> {
           });
           return;
         }
+
+        await _rememberEmail(_emailController.text);
 
         if (mounted) {
           Navigator.pushReplacement(
@@ -200,24 +239,106 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              style: const TextStyle(
-                                  color: Color(0xFFF9FAFB), fontSize: 14),
-                              decoration: _inputDecoration(
-                                hint: 'exemple@email.com',
-                                icon: Icons.email_outlined,
-                              ),
-                              validator: (value) {
-                                if (value?.isEmpty ?? true) {
-                                  return 'Veuillez entrer votre email';
-                                }
-                                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                                    .hasMatch(value!)) {
-                                  return 'Email invalide';
-                                }
-                                return null;
+                            RawAutocomplete<String>(
+                              textEditingController: _emailController,
+                              focusNode: _emailFocusNode,
+                              optionsBuilder: (textEditingValue) {
+                                final q =
+                                    textEditingValue.text.trim().toLowerCase();
+                                if (q.isEmpty) return const Iterable<String>.empty();
+                                return _knownEmails.where(
+                                  (e) => e.toLowerCase().startsWith(q),
+                                );
+                              },
+                              displayStringForOption: (o) => o,
+                              onSelected: (selection) {
+                                _emailController.text = selection;
+                              },
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                return TextFormField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  keyboardType: TextInputType.emailAddress,
+                                  style: const TextStyle(
+                                      color: Color(0xFFF9FAFB), fontSize: 14),
+                                  decoration: _inputDecoration(
+                                    hint: 'exemple@email.com',
+                                    icon: Icons.email_outlined,
+                                  ),
+                                  validator: (value) {
+                                    if (value?.isEmpty ?? true) {
+                                      return 'Veuillez entrer votre email';
+                                    }
+                                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                        .hasMatch(value!)) {
+                                      return 'Email invalide';
+                                    }
+                                    return null;
+                                  },
+                                  onFieldSubmitted: (_) => onFieldSubmitted(),
+                                );
+                              },
+                              optionsViewBuilder: (context, onSelected, options) {
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: Container(
+                                      margin: const EdgeInsets.only(top: 6),
+                                      constraints: const BoxConstraints(maxHeight: 220),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF111827),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: const Color(0xFF1F2937),
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.35),
+                                            blurRadius: 18,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ListView.builder(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        shrinkWrap: true,
+                                        itemCount: options.length,
+                                        itemBuilder: (context, index) {
+                                          final option = options.elementAt(index);
+                                          return InkWell(
+                                            onTap: () => onSelected(option),
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 10,
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.history_rounded,
+                                                    size: 16,
+                                                    color: Color(0xFF9CA3AF),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      option,
+                                                      style: const TextStyle(
+                                                        color: Color(0xFFF9FAFB),
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                );
                               },
                             ),
                             const SizedBox(height: 20),

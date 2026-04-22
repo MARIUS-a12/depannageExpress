@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:dannexpress/apropos.dart';
 import 'package:dannexpress/formulaire.dart';
 import 'package:dannexpress/partenaire.dart';
-import 'package:dannexpress/appBar.dart';
 import 'package:dannexpress/login.dart';
+import 'package:dannexpress/inscription_user.dart';
 
 class Acceuil extends StatefulWidget {
   const Acceuil({super.key});
@@ -63,15 +63,29 @@ class _AcceuilState extends State<Acceuil> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 50),
+            padding: const EdgeInsets.only(right: 1),
             child: IconButton(
               icon: const Icon(Icons.notifications_none),
-              color: Colors.white,
+              color: const Color.fromARGB(255, 6, 6, 6),
               onPressed: () {},
               tooltip: 'Notifications',
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.login_outlined),
+            color: const Color.fromARGB(255, 6, 6, 6),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const InscriptionUserPage(),
+                ),
+              );
+            },
+            tooltip: 'Connexion',
+          ),
         ],
+        
       ),
       body: SingleChildScrollView(
         child: Column(

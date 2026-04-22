@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dannexpress/appBar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dannexpress/connectivity_wrapper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Formulaire extends StatefulWidget {
   const Formulaire({super.key});
@@ -11,19 +13,53 @@ class Formulaire extends StatefulWidget {
   State<Formulaire> createState() => _FormulaireState();
 }
 
+class _SavedIdentity {
+  final String nom;
+  final String prenom;
+  final String email;
+  final String telephone;
+
+  const _SavedIdentity({
+    required this.nom,
+    required this.prenom,
+    required this.email,
+    required this.telephone,
+  });
+
+  String get label => [nom, prenom].where((s) => s.trim().isNotEmpty).join(' ');
+
+  String get normalizedKey =>
+      '${nom.trim().toLowerCase()}|${prenom.trim().toLowerCase()}|${telephone.trim().toLowerCase()}|${email.trim().toLowerCase()}';
+
+  Map<String, String> toJson() => {
+        'nom': nom,
+        'prenom': prenom,
+        'email': email,
+        'telephone': telephone,
+      };
+}
+
 class _FormulaireState extends State<Formulaire> {
+  static const _kKnownEmailsKey = 'login.known_emails';
+  static const _kSavedIdentitiesKey = 'formulaire.saved_identities';
+  static const _kMaxSavedIdentities = 20;
+
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nomController;
   late TextEditingController _prenomController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _descriptionController;
+  final _nomFocusNode = FocusNode();
+  final _emailFocusNode = FocusNode();
 
   String? _typePanne;
   bool _localisationEnvoyee = false;
   bool _isLoading = false;
   double? _latitude;
   double? _longitude;
+  List<String> _knownEmails = const [];
+  List<_SavedIdentity> _savedIdentities = const [];
 
   @override
   void initState() {
@@ -33,10 +69,94 @@ class _FormulaireState extends State<Formulaire> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _descriptionController = TextEditingController();
+
+    _chargerEmailsConnus();
+    _chargerIdentitesSauvegardees();
+  }
+
+  Future<void> _chargerEmailsConnus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final emails = prefs.getStringList(_kKnownEmailsKey) ?? const <String>[];
+    if (!mounted) return;
+    setState(() => _knownEmails = emails);
+  }
+
+  Future<void> _chargerIdentitesSauvegardees() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_kSavedIdentitiesKey) ?? const <String>[];
+    final parsed = <_SavedIdentity>[];
+    for (final s in raw) {
+      try {
+        final m = jsonDecode(s) as Map<String, dynamic>;
+        parsed.add(
+          _SavedIdentity(
+            nom: (m['nom'] as String? ?? '').trim(),
+            prenom: (m['prenom'] as String? ?? '').trim(),
+            email: (m['email'] as String? ?? '').trim(),
+            telephone: (m['telephone'] as String? ?? '').trim(),
+          ),
+        );
+      } catch (_) {
+        // ignore corrupted entry
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _savedIdentities = parsed.where((p) => p.nom.isNotEmpty).toList();
+    });
+  }
+
+  Future<void> _rememberIdentityProfile() async {
+    final profile = _SavedIdentity(
+      nom: _nomController.text.trim(),
+      prenom: _prenomController.text.trim(),
+      email: _emailController.text.trim(),
+      telephone: _phoneController.text.trim(),
+    );
+    if (profile.nom.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final currentRaw =
+        prefs.getStringList(_kSavedIdentitiesKey) ?? <String>[];
+
+    final normalizedKey = profile.normalizedKey;
+    final kept = <String>[];
+    for (final s in currentRaw) {
+      try {
+        final m = jsonDecode(s) as Map<String, dynamic>;
+        final existing = _SavedIdentity(
+          nom: (m['nom'] as String? ?? '').trim(),
+          prenom: (m['prenom'] as String? ?? '').trim(),
+          email: (m['email'] as String? ?? '').trim(),
+          telephone: (m['telephone'] as String? ?? '').trim(),
+        );
+        if (existing.normalizedKey != normalizedKey) kept.add(s);
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    final encoded = jsonEncode(profile.toJson());
+    kept.insert(0, encoded);
+    if (kept.length > _kMaxSavedIdentities) {
+      kept.removeRange(_kMaxSavedIdentities, kept.length);
+    }
+    await prefs.setStringList(_kSavedIdentitiesKey, kept);
+
+    if (!mounted) return;
+    setState(() {
+      final next = _savedIdentities
+          .where((p) => p.normalizedKey != normalizedKey)
+          .toList();
+      next.insert(0, profile);
+      _savedIdentities = next;
+    });
   }
 
   @override
   void dispose() {
+    _nomFocusNode.dispose();
+    _emailFocusNode.dispose();
     _nomController.dispose();
     _prenomController.dispose();
     _emailController.dispose();
@@ -106,6 +226,7 @@ class _FormulaireState extends State<Formulaire> {
       setState(() => _isLoading = true);
 
       try {
+        await _rememberIdentityProfile();
         await FirebaseFirestore.instance.collection('pannes').add({
           'nom': _nomController.text.trim(),
           'prenom': _prenomController.text.trim(),
@@ -237,24 +358,142 @@ class _FormulaireState extends State<Formulaire> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _nomController,
-                            decoration: InputDecoration(
-                              labelText: 'Nom *',
-                              prefixIcon:
-                                  const Icon(Icons.person_outline),
-                              filled: true,
-                              fillColor: const Color(0xFFF5F7FB),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty)
-                                return 'Le nom est obligatoire';
-                              if (value.length < 2)
-                                return 'Le nom doit contenir au moins 2 caractères';
-                              return null;
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              return RawAutocomplete<_SavedIdentity>(
+                                textEditingController: _nomController,
+                                focusNode: _nomFocusNode,
+                                optionsBuilder: (textEditingValue) {
+                                  final q = textEditingValue.text
+                                      .trim()
+                                      .toLowerCase();
+                                  if (q.isEmpty) {
+                                    return const Iterable<_SavedIdentity>.empty();
+                                  }
+                                  return _savedIdentities.where(
+                                    (p) => p.nom.toLowerCase().startsWith(q),
+                                  );
+                                },
+                                displayStringForOption: (o) => o.label,
+                                onSelected: (selection) {
+                                  _nomController.text = selection.nom;
+                                  _prenomController.text = selection.prenom;
+                                  _emailController.text = selection.email;
+                                  _phoneController.text = selection.telephone;
+                                  _nomFocusNode.unfocus();
+                                },
+                                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                  return TextFormField(
+                                    controller: controller,
+                                    focusNode: focusNode,
+                                    textInputAction: TextInputAction.next,
+                                    decoration: InputDecoration(
+                                      labelText: 'Nom *',
+                                      prefixIcon: const Icon(Icons.person_outline),
+                                      filled: true,
+                                      fillColor: const Color(0xFFF5F7FB),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    onFieldSubmitted: (_) => onFieldSubmitted(),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Le nom est obligatoire';
+                                      }
+                                      if (value.length < 2) {
+                                        return 'Le nom doit contenir au moins 2 caractères';
+                                      }
+                                      return null;
+                                    },
+                                  );
+                                },
+                                optionsViewBuilder: (context, onSelected, options) {
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: SizedBox(
+                                        width: constraints.maxWidth,
+                                        child: Container(
+                                          margin: const EdgeInsets.only(top: 6),
+                                          constraints: const BoxConstraints(maxHeight: 240),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: Colors.black.withOpacity(0.08),
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.08),
+                                                blurRadius: 18,
+                                                offset: const Offset(0, 8),
+                                              ),
+                                            ],
+                                          ),
+                                          child: ListView.builder(
+                                            padding: const EdgeInsets.symmetric(vertical: 6),
+                                            shrinkWrap: true,
+                                            itemCount: options.length,
+                                            itemBuilder: (context, index) {
+                                              final option = options.elementAt(index);
+                                              return InkWell(
+                                                onTap: () => onSelected(option),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 14,
+                                                    vertical: 10,
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.history_rounded,
+                                                        size: 16,
+                                                        color: Color(0xFF64748B),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Text(
+                                                              option.label,
+                                                              style: const TextStyle(
+                                                                color: Color(0xFF0F172A),
+                                                                fontSize: 14,
+                                                                fontWeight: FontWeight.w600,
+                                                              ),
+                                                            ),
+                                                            if (option.telephone.isNotEmpty || option.email.isNotEmpty)
+                                                              Padding(
+                                                                padding: const EdgeInsets.only(top: 2),
+                                                                child: Text(
+                                                                  [
+                                                                    if (option.telephone.isNotEmpty) option.telephone,
+                                                                    if (option.email.isNotEmpty) option.email,
+                                                                  ].join(' · '),
+                                                                  style: const TextStyle(
+                                                                    color: Color(0xFF64748B),
+                                                                    fontSize: 12,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
                             },
                           ),
                           const SizedBox(height: 16),
@@ -278,24 +517,107 @@ class _FormulaireState extends State<Formulaire> {
                             },
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
-                              labelText: 'Adresse mail',
-                              prefixIcon: const Icon(Icons.email),
-                              filled: true,
-                              fillColor: const Color(0xFFF5F7FB),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value != null && value.isNotEmpty) {
-                                if (!value.contains('@'))
-                                  return 'Veuillez entrer une adresse email valide';
-                              }
-                              return null;
+                          RawAutocomplete<String>(
+                            textEditingController: _emailController,
+                            focusNode: _emailFocusNode,
+                            optionsBuilder: (textEditingValue) {
+                              final q =
+                                  textEditingValue.text.trim().toLowerCase();
+                              if (q.isEmpty) return const Iterable<String>.empty();
+                              return _knownEmails.where(
+                                (e) => e.toLowerCase().startsWith(q),
+                              );
+                            },
+                            displayStringForOption: (o) => o,
+                            onSelected: (selection) {
+                              _emailController.text = selection;
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: InputDecoration(
+                                  labelText: 'Adresse mail',
+                                  prefixIcon: const Icon(Icons.email),
+                                  filled: true,
+                                  fillColor: const Color(0xFFF5F7FB),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onFieldSubmitted: (_) => onFieldSubmitted(),
+                                validator: (value) {
+                                  if (value != null && value.isNotEmpty) {
+                                    if (!value.contains('@')) {
+                                      return 'Veuillez entrer une adresse email valide';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              );
+                            },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 6),
+                                    constraints: const BoxConstraints(maxHeight: 220),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF111827),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFF1F2937),
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.35),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ListView.builder(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      shrinkWrap: true,
+                                      itemCount: options.length,
+                                      itemBuilder: (context, index) {
+                                        final option = options.elementAt(index);
+                                        return InkWell(
+                                          onTap: () => onSelected(option),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.history_rounded,
+                                                  size: 16,
+                                                  color: Color(0xFF9CA3AF),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    option,
+                                                    style: const TextStyle(
+                                                      color: Color(0xFFF9FAFB),
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
                             },
                           ),
                           const SizedBox(height: 16),
