@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "290631230846",
+    "project_id": "gestionpanne-4432c",
+    "storage_bucket": "gestionpanne-4432c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:290631230846:android:9bd76b035b09ee5899ff2f",
+        "android_client_info": {
+          "package_name": "com.example.dannexpress"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEP9Yj3ezdNt_CvL4pG9I3z8IaGDN7yTI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
