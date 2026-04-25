@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:290631230846:android:9bd76b035b09ee5899ff2f",
+        "mobilesdk_app_id": "1:290631230846:android:a243d38dcce10bb199ff2f",
         "android_client_info": {
-          "package_name": "com.example.dannexpress"
+          "package_name": "ci.mesafrique.dannexpress"
         }
       },
       "oauth_client": [],

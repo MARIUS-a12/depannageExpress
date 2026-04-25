@@ -1,4 +1,4 @@
-package com.example.dannexpress
+package ci.mesafrique.dannexpress
 
 import io.flutter.embedding.android.FlutterActivity
 
