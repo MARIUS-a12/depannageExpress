@@ -26,7 +26,7 @@ class Apropos extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF21405F), Color(0xFF6dd5ed)],
+                    colors: [Color(0xFF21405F), Color.fromARGB(255, 32, 101, 117)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -84,7 +84,7 @@ class Apropos extends StatelessWidget {
                   'Nous sommes une entreprise spécialisée dans la maintenance automobile, la maintenance industrielle, les travaux de bâtiment (BT), ainsi que les installations électriques, les caméras de surveillance et les panneaux solaires. Nous accompagnons particuliers et entreprises avec des solutions fiables, modernes et durables.',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF4A5568),
+                    color: Color.fromARGB(255, 7, 7, 8),
                     height: 1.6,
                   ),
                 ),
@@ -101,7 +101,7 @@ class Apropos extends StatelessWidget {
                   'Notre mission est de fournir des services de qualité, rapides et sécurisés dans tous nos domaines d\'intervention, tout en garantissant la satisfaction de nos clients et la durabilité des installations.',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF4A5568),
+                    color: Color.fromARGB(255, 7, 7, 8),
                     height: 1.6,
                   ),
                 ),
