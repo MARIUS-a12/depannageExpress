@@ -70,7 +70,19 @@ class _AcceuilState extends State<Acceuil> {
               onPressed: () {},
               tooltip: 'Notifications',
             ),
+            
           ),
+          
+          Padding(
+            padding: const EdgeInsets.only(right: 20),
+            child: IconButton(
+              icon: const Icon(Icons.info_outline),
+              color: const Color.fromARGB(255, 6, 6, 6),
+              onPressed: (){}, 
+              tooltip: 'en savoir plus',
+            ),
+          ),
+
           IconButton(
             icon: const Icon(Icons.login_outlined),
             color: const Color.fromARGB(255, 6, 6, 6),
